@@ -185,6 +185,18 @@ def truncate_filename(filename: str) -> str:
     return str(filename_path.with_name(formatted_filename))
 
 
+def find_existing_download_path(expected_path: str | Path) -> Path | None:
+    """Find an existing download under its expected or recoded filename."""
+    expected_path = Path(expected_path)
+    if expected_path.exists():
+        return expected_path
+
+    recoded_path = expected_path.with_name(
+        f"{expected_path.stem}_recode{expected_path.suffix}",
+    )
+    return recoded_path if recoded_path.exists() else None
+
+
 def reserve_unique_filename(
     filename: str,
     reserved_names: set[str] | None = None,

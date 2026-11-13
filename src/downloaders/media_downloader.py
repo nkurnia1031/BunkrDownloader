@@ -20,6 +20,7 @@ from src.enums import CompletedReason, FailedReason, HTTPStatus, SkippedReason
 from src.misc.bunkr_utils import subdomain_is_offline
 from src.misc.file_utils import (
     append_suffix,
+    find_existing_download_path,
     matches_ignore_list,
     matches_include_list,
     truncate_filename,
@@ -189,7 +190,7 @@ class MediaDownloader:
         """Determine whether a file should be skipped during download.
 
         If any of these conditions are met, the download is skipped:
-            - The file already exists at the specified path.
+            - The file exists at the specified path or its recoded sibling exists.
             - The file's name matches any pattern in the ignore list.
             - The file's name does not match any pattern in the include list.
         """
@@ -206,8 +207,8 @@ class MediaDownloader:
         ignore_list = getattr(self.session_info.args, "ignore", [])
         include_list = getattr(self.session_info.args, "include", [])
 
-        # Check if the file already exists
-        if Path(final_path).exists():
+        # Check if the file already exists, including a recoded sibling.
+        if find_existing_download_path(final_path) is not None:
             self.live_manager.update_summary(SkippedReason.ALREADY_DOWNLOADED)
             return log_and_skip_event(
                 f"{self.download_info.filename} has already been downloaded.",

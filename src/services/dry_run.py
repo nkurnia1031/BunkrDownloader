@@ -17,6 +17,7 @@ from src.config import DOWNLOAD_HEADERS, KB, MAX_WORKERS
 from src.crawlers.crawler_utils import get_download_info
 from src.downloaders.download_utils import detect_range_support
 from src.misc.file_utils import (
+    find_existing_download_path,
     matches_ignore_list,
     matches_include_list,
     reserve_unique_filename,
@@ -81,8 +82,9 @@ def _get_cached_result(
         return None
 
     filename = cached.get("filename", "")
-    file_path = Path(context.session_info.download_path) / truncate_filename(filename)
-    if not file_path.exists():
+    expected_path = Path(context.session_info.download_path) / truncate_filename(filename)
+    file_path = find_existing_download_path(expected_path)
+    if file_path is None:
         return None
 
     return {
@@ -121,13 +123,14 @@ async def _resolve_item(item_page: str, context: ResolveContext) -> dict:
         if filter_status:
             return {"filename": filename, "size": None, "status": filter_status}
 
-        final_path = (
+        expected_path = (
             Path(context.session_info.download_path) / truncate_filename(filename)
         )
-        if final_path.exists():
+        existing_path = find_existing_download_path(expected_path)
+        if existing_path is not None:
             return {
                 "filename": filename,
-                "size": final_path.stat().st_size,
+                "size": existing_path.stat().st_size,
                 "status": "already_downloaded",
             }
 

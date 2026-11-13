@@ -15,7 +15,11 @@ from src.config import MAX_RETRIES, MAX_WORKERS
 from src.crawlers.crawler_utils import get_download_info
 from src.enums import FailedReason, SkippedReason
 from src.managers.state_manager import save_album_state
-from src.misc.file_utils import reserve_unique_filename, truncate_filename
+from src.misc.file_utils import (
+    find_existing_download_path,
+    reserve_unique_filename,
+    truncate_filename,
+)
 from src.misc.general_utils import fetch_page
 from src.models import (
     AlbumInfo,
@@ -158,7 +162,7 @@ class AlbumDownloader:
         expected_path = (
             Path(self.session_info.download_path) / truncate_filename(filename)
         )
-        if not expected_path.exists():
+        if find_existing_download_path(expected_path) is None:
             return False
 
         task = self.live_manager.add_task(current_task=current_task)
@@ -257,7 +261,7 @@ class AlbumDownloader:
             expected_path = (
                 Path(self.session_info.download_path) / truncate_filename(filename)
             )
-            is_completed = expected_path.exists()
+            is_completed = find_existing_download_path(expected_path) is not None
 
         async with self.runtime.synch.state_lock:
             self.download_state.cached_items[item_page] = {
