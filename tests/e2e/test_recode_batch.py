@@ -28,7 +28,6 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
         download_info_response: tuple[str, str, None],
     ) -> dict[str, object]:
         """Run the batch entry point with offline network-boundary stubs."""
-        item_url = "https://bunkr.cr/f/item123"
         args = Namespace(
             dry_run=False,
             max_concurrent_urls=1,
