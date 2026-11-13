@@ -82,7 +82,9 @@ def _get_cached_result(
         return None
 
     filename = cached.get("filename", "")
-    expected_path = Path(context.session_info.download_path) / truncate_filename(filename)
+    expected_path = (
+        Path(context.session_info.download_path) / truncate_filename(filename)
+    )
     file_path = find_existing_download_path(expected_path)
     if file_path is None:
         return None

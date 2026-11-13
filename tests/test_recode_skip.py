@@ -133,7 +133,9 @@ class RecodeSkipTests(unittest.TestCase):
             return_value=("https://example.test/video", "video.mp4", None),
         )
         detect_range_support = Mock(
-            side_effect=AssertionError("existing recoded file has no remote size probe"),
+            side_effect=AssertionError(
+                "existing recoded file has no remote size probe",
+            ),
         )
 
         with (
