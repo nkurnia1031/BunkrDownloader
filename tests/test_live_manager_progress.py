@@ -12,7 +12,7 @@ from src.managers.live_manager import LiveManager
 class LiveManagerProgressTests(unittest.TestCase):
     """Keep progress initialization and completed-file reporting together."""
 
-    def test_add_album_progress_counts_and_reports_each_completed_file(self) -> None:
+    def test_add_download_progress_counts_and_reports_each_completed_file(self) -> None:
         """Precompleted outputs initialize progress and are reported once each."""
         progress_manager = Mock()
         logger_table = Mock()
@@ -26,16 +26,18 @@ class LiveManagerProgressTests(unittest.TestCase):
         logger_table.reset_mock()
         summary_manager.reset_mock()
 
-        manager.add_album_progress(
+        manager.add_download_progress(
             description="album",
             num_tasks=3,
             completed_filenames=["one.mp4", "two.mp4"],
+            completed_size_bytes=20,
         )
 
         progress_manager.add_overall_task.assert_called_once_with(
             "album",
             3,
             completed=2,
+            completed_size_bytes=20,
         )
         logger_table.log.assert_has_calls(
             [

@@ -29,7 +29,7 @@ from src.config import (
 )
 from src.enums import HTTPStatus
 from src.misc.file_utils import append_suffix
-from src.models import ChunkInfo, DownloadConfig, DownloadPlan
+from src.models import ChunkInfo, DownloadConfig, DownloadPlan, TransferProgress
 
 if TYPE_CHECKING:
     from src.managers.live_manager import LiveManager
@@ -114,6 +114,14 @@ def save_file_with_progress(
 
     chunk_size = get_chunk_size(file_size)
     total_downloaded = offset
+    live_manager.update_task(
+        task,
+        transfer=TransferProgress(
+            downloaded_bytes=total_downloaded,
+            total_bytes=file_size if file_size >= 0 else None,
+            transferred_bytes=0,
+        ),
+    )
 
     try:
         with temp_download_path.open("ab" if offset else "wb") as file:
@@ -127,12 +135,31 @@ def save_file_with_progress(
                     total_downloaded += len(chunk)
                     if file_size > 0:
                         completed = min((total_downloaded / file_size) * 100, 99.0)
-                        live_manager.update_task(task, completed=completed)
+                    else:
+                        completed = None
+                    live_manager.update_task(
+                        task,
+                        completed=completed,
+                        transfer=TransferProgress(
+                            downloaded_bytes=total_downloaded,
+                            total_bytes=file_size if file_size >= 0 else None,
+                            transferred_bytes=len(chunk),
+                        ),
+                    )
 
     except (ChunkedEncodingError, RequestException):
         return True
 
     if total_downloaded == file_size or (file_size == -1 and total_downloaded > 0):
+        if file_size == -1:
+            live_manager.update_task(
+                task,
+                transfer=TransferProgress(
+                    downloaded_bytes=total_downloaded,
+                    total_bytes=total_downloaded,
+                    transferred_bytes=0,
+                ),
+            )
         shutil.move(temp_download_path, download_path)
         live_manager.update_task(task, completed=100, visible=False)
         return False
@@ -334,7 +361,7 @@ def _download_single_chunk(
 
     # Resume: chunk already complete from a previous run, skip entirely.
     if path.exists() and path.stat().st_size == expected:
-        chunk_info.on_progress(expected)
+        chunk_info.on_progress(expected, from_network=False)
         return False
 
     for attempt in range(1, CHUNK_MAX_RETRIES + 1):
@@ -381,20 +408,36 @@ def download_chunks(
     lock = threading.Lock()
     total_downloaded = [0]  # mutable container for thread-safe accumulation
 
-    def on_progress(num_bytes: int) -> None:
+    def on_progress(num_bytes: int, *, from_network: bool = True) -> None:
         with lock:
-            total_downloaded[0] += num_bytes
+            total_downloaded[0] = max(0, total_downloaded[0] + num_bytes)
             completed = min(
                 (total_downloaded[0] / download_config.content_length) * 100,
                 99.0,
             )
-            live_manager.update_task(task, completed=completed)
+            live_manager.update_task(
+                task,
+                completed=completed,
+                transfer=TransferProgress(
+                    downloaded_bytes=total_downloaded[0],
+                    total_bytes=download_config.content_length,
+                    transferred_bytes=abs(num_bytes) if from_network else 0,
+                ),
+            )
 
     any_failed = False
     download_plan = _build_download_plan(
         base_path,
         download_config.content_length,
         download_config.num_connections,
+    )
+    live_manager.update_task(
+        task,
+        transfer=TransferProgress(
+            downloaded_bytes=0,
+            total_bytes=download_config.content_length,
+            transferred_bytes=0,
+        ),
     )
     max_workers = min(download_config.num_connections, download_plan.num_ranges)
 

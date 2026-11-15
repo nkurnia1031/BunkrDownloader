@@ -20,6 +20,7 @@ from rich.text import Text
 
 from src.config import REFRESH_PER_SECOND
 from src.enums import SkippedReason, TASK_REASON_MAPPING, TaskResult
+from src.models import TransferProgress
 from src.version import get_version_string
 
 from .log_manager import LoggerTable
@@ -62,18 +63,20 @@ class LiveManager:
             details="The script has started execution.",
         )
 
-    def add_album_progress(
+    def add_download_progress(
         self,
         description: str,
         num_tasks: int,
         completed_filenames: Iterable[str] = (),
+        completed_size_bytes: int = 0,
     ) -> None:
-        """Create album progress and report files found complete during the scan."""
+        """Create progress and report files found complete during the scan."""
         filenames = tuple(completed_filenames)
         self.progress_manager.add_overall_task(
             description,
             num_tasks,
             completed=len(filenames),
+            completed_size_bytes=completed_size_bytes,
         )
         for filename in filenames:
             self.update_log(
@@ -85,9 +88,23 @@ class LiveManager:
             )
             self.update_summary(SkippedReason.ALREADY_DOWNLOADED)
 
-    def add_task(self, current_task: int = 0, total: int = 100) -> None:
+    def add_task(
+        self,
+        current_task: int = 0,
+        total: int = 100,
+        *,
+        description: str | None = None,
+    ) -> int:
         """Call ProgressManager to add an individual task."""
-        return self.progress_manager.add_task(current_task, total)
+        return self.progress_manager.add_task(
+            current_task,
+            total,
+            description=description,
+        )
+
+    def update_task_description(self, task_id: int, description: str) -> None:
+        """Replace an item's resolving label with its resolved filename."""
+        self.progress_manager.update_task_description(task_id, description)
 
     def update_task(
         self,
@@ -96,9 +113,16 @@ class LiveManager:
         advance: int = 0,
         *,
         visible: bool = True,
+        transfer: TransferProgress | None = None,
     ) -> None:
         """Call ProgressManager to update an individual task."""
-        self.progress_manager.update_task(task_id, completed, advance, visible=visible)
+        self.progress_manager.update_task(
+            task_id,
+            completed,
+            advance,
+            visible=visible,
+            transfer=transfer,
+        )
 
     def update_log(self, *, event: str, details: str) -> None:
         """Log an event and refreshes the live display."""
@@ -140,7 +164,7 @@ class LiveManager:
         footer = Align.left(footer_text)
         return Group(
             self.progress_table,
-            self.logger_table.render_log_panel(panel_width=2*panel_width),
+            self.logger_table.render_log_panel(panel_width=panel_width),
             footer,
         )
 

@@ -26,7 +26,13 @@ from src.misc.file_utils import (
     truncate_filename,
     write_on_session_log,
 )
-from src.models import DownloadConfig, DownloadInfo, RetryConfig, SessionInfo
+from src.models import (
+    DownloadConfig,
+    DownloadInfo,
+    RetryConfig,
+    SessionInfo,
+    TransferProgress,
+)
 
 from .download_utils import (
     detect_range_support,
@@ -80,6 +86,14 @@ class MediaDownloader:
                     self.download_info.download_link,
                     DOWNLOAD_HEADERS,
                 )
+                if content_length >= 0:
+                    self.live_manager.update_task(
+                        self.download_info.task,
+                        transfer=TransferProgress(
+                            total_bytes=content_length,
+                            transferred_bytes=0,
+                        ),
+                    )
 
                 if should_use_parallel_download(
                     content_length,
@@ -208,7 +222,23 @@ class MediaDownloader:
         include_list = getattr(self.session_info.args, "include", [])
 
         # Check if the file already exists, including a recoded sibling.
-        if find_existing_download_path(final_path) is not None:
+        existing_path = find_existing_download_path(final_path)
+        if existing_path is not None:
+            try:
+                existing_size = existing_path.stat().st_size
+
+            except OSError:
+                existing_size = None
+
+            if existing_size is not None:
+                self.live_manager.update_task(
+                    self.download_info.task,
+                    transfer=TransferProgress(
+                        downloaded_bytes=existing_size,
+                        total_bytes=existing_size,
+                        transferred_bytes=0,
+                    ),
+                )
             self.live_manager.update_summary(SkippedReason.ALREADY_DOWNLOADED)
             return log_and_skip_event(
                 f"{self.download_info.filename} has already been downloaded.",

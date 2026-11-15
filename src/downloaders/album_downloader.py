@@ -76,7 +76,11 @@ class AlbumDownloader:
             await self._pace_worker_start()
 
             # Cached file is missing or stale -- fall through and process normally.
-            task = self.live_manager.add_task(current_task=current_task)
+            cached_item = self.download_state.cached_items.get(item_page, {})
+            task = self.live_manager.add_task(
+                current_task=current_task,
+                description=cached_item.get("filename"),
+            )
 
             # Process the download of an item
             try:
@@ -88,6 +92,8 @@ class AlbumDownloader:
                 self.download_state.unresolved_failures += 1
                 await self._persist_item_state(item_page, "", failed=True)
                 return
+
+            self.live_manager.update_task_description(task, item_info.filename)
 
             if item_info.download_link:
                 await self._download_item(item_info, task, max_retries)
@@ -123,10 +129,24 @@ class AlbumDownloader:
             self.album_info.item_pages,
             self.download_state.cached_items,
         )
-        self.live_manager.add_album_progress(
-            description=self.album_info.album_id,
+        completed_size_bytes = 0
+        for filename in existing_items.values():
+            expected_path = (
+                Path(self.session_info.download_path) / truncate_filename(filename)
+            )
+            existing_path = find_existing_download_path(expected_path)
+            if existing_path is not None:
+                try:
+                    completed_size_bytes += existing_path.stat().st_size
+
+                except OSError:
+                    pass
+
+        self.live_manager.add_download_progress(
+            description=self.album_info.album_name or self.album_info.album_id,
             num_tasks=num_tasks,
             completed_filenames=list(existing_items.values()),
+            completed_size_bytes=completed_size_bytes,
         )
 
         # Create tasks for downloading each item in the album

@@ -130,7 +130,10 @@ async def handle_download_process(
             live_manager,
         )
         album_info = AlbumInfo(
-            album_id=identifier, item_pages=item_pages, item_dates=item_dates,
+            album_id=identifier,
+            item_pages=item_pages,
+            item_dates=item_dates,
+            album_name=get_album_name(url_info.soup),
         )
         album_downloader = AlbumDownloader(
             session_info=session_info,
@@ -146,8 +149,8 @@ async def handle_download_process(
         url_info.soup,
         clean_name=session_info.args.clean_name,
     )
-    live_manager.add_overall_task(identifier, num_tasks=1)
-    task = live_manager.add_task()
+    live_manager.add_download_progress(description=filename, num_tasks=1)
+    task = live_manager.add_task(description=filename)
     if not download_link:
         live_manager.update_log(
             event="Download failed",
@@ -238,6 +241,7 @@ async def execute_dry_run_for_url(
         item_pages=item_pages,
         item_dates=item_dates,
         cached_items=cached_items,
+        album_name=get_album_name(url_info.soup),
     )
     await execute_dry_run(album_info, session_info, console)
 

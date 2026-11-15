@@ -18,7 +18,7 @@ from src.managers.log_manager import LoggerTable
 from src.managers.session_manager import configure_session
 from src.misc.args_utils import parse_arguments
 from src.misc.file_utils import append_suffix, write_on_session_log
-from src.models import DownloadInfo, RetryConfig, SessionInfo
+from src.models import DownloadInfo, RetryConfig, SessionInfo, TransferProgress
 
 
 class ResumeTests(unittest.TestCase):
@@ -58,6 +58,15 @@ class ResumeTests(unittest.TestCase):
         self.assertFalse(self.save(response))
         self.assertEqual(self.path.read_bytes(), b"abcdef")
         self.assertFalse(self.partial.exists())
+        self.live.update_task.assert_any_call(
+            0,
+            completed=99.0,
+            transfer=TransferProgress(
+                downloaded_bytes=6,
+                total_bytes=6,
+                transferred_bytes=3,
+            ),
+        )
 
     def test_ignored_range_restarts(self) -> None:
         """A full response replaces partial bytes rather than appending them."""

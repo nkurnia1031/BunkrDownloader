@@ -30,6 +30,7 @@ class AlbumInfo:
     item_pages: list[str]
     item_dates: dict[str, datetime | None] = field(default_factory=dict)
     cached_items: dict[str, dict] = field(default_factory=dict)
+    album_name: str | None = None
 
 @dataclass
 class DownloadInfo:
@@ -157,6 +158,7 @@ class ProgressState:
 
     num_tasks: int = 0
     initial_completed_tasks: int = 0
+    initial_completed_size_bytes: int = 0
 
     # Explicit reference to the overall task currently being tracked, set by
     # add_overall_task(). This replaces guessing "the current task" from list
@@ -168,9 +170,25 @@ class ProgressState:
     buffered_overall_task_ids: set[TaskID] = field(default_factory=set)
     completed_task_ids: set[int] = field(default_factory=set)
     current_album_tasks: dict[int, float] = field(default_factory=dict)
+    task_prefixes: dict[int, str] = field(default_factory=dict)
+    task_downloaded_bytes: dict[int, int] = field(default_factory=dict)
+    task_total_bytes: dict[int, int] = field(default_factory=dict)
+    task_network_bytes: dict[int, int] = field(default_factory=dict)
+    task_transfer_samples: dict[int, deque[tuple[float, int]]] = field(
+        default_factory=dict,
+    )
+    task_transfer_speeds: dict[int, float] = field(default_factory=dict)
 
     # Synchronize access to shared progress state across concurrent download threads.
     lock: Lock = field(default_factory=Lock)
+
+@dataclass(frozen=True, slots=True)
+class TransferProgress:
+    """Byte-level progress for one active file transfer."""
+
+    downloaded_bytes: int | None = None
+    total_bytes: int | None = None
+    transferred_bytes: int | None = None
 
 @dataclass
 class DownloadSynch:

@@ -129,10 +129,11 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             result["detect_range_support"].assert_not_called()
             result["download_file"].assert_not_called()
             result["log_failed_urls"].assert_not_called()
-            result["live_manager"].add_album_progress.assert_called_once_with(
-                description=album_id,
+            result["live_manager"].add_download_progress.assert_called_once_with(
+                description="Test album",
                 num_tasks=1,
                 completed_filenames=["video.mp4"],
+                completed_size_bytes=len(b"encoded"),
             )
             result["live_manager"].add_task.assert_not_called()
             result["live_manager"].update_summary.assert_not_called()
