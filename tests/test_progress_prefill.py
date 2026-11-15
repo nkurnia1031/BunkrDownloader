@@ -26,6 +26,7 @@ class ProgressPrefillTests(unittest.TestCase):
         output = StringIO()
         Console(file=output, width=100).print(manager.overall_progress)
         self.assertIn("2/3", output.getvalue())
+        self.assertIn("67%", output.getvalue())
 
         remaining_task = manager.add_task(current_task=2)
         manager.update_task(remaining_task, completed=100)
