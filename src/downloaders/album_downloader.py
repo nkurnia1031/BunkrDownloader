@@ -130,17 +130,21 @@ class AlbumDownloader:
             self.download_state.cached_items,
         )
         completed_size_bytes = 0
+        completed_paths: set[Path] = set()
         for filename in existing_items.values():
             expected_path = (
                 Path(self.session_info.download_path) / truncate_filename(filename)
             )
             existing_path = find_existing_download_path(expected_path)
-            if existing_path is not None:
-                try:
-                    completed_size_bytes += existing_path.stat().st_size
+            if existing_path is None or existing_path in completed_paths:
+                continue
 
-                except OSError:
-                    pass
+            completed_paths.add(existing_path)
+            try:
+                completed_size_bytes += existing_path.stat().st_size
+
+            except OSError:
+                pass
 
         self.live_manager.add_download_progress(
             description=self.album_info.album_name or self.album_info.album_id,

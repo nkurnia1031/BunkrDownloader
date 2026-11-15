@@ -102,10 +102,11 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             "live_manager": live_manager,
         }
 
-    def test_cached_recoded_album_file_skips_item_page_and_download(self) -> None:
-        """A recoded output is enough to skip a cached album item end to end."""
+    def test_cached_recoded_album_files_count_shared_path_size_once(self) -> None:
+        """A shared recoded path contributes its on-disk size only once."""
         album_url = "https://bunkr.cr/a/album123"
         item_url = "https://bunkr.cr/f/item123"
+        second_item_url = "https://bunkr.cr/f/item456"
         album_id = "album123"
 
         with tempfile.TemporaryDirectory() as directory:
@@ -113,8 +114,14 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             save_album_state(
                 directory,
                 album_id,
-                [item_url],
-                {item_url: {"filename": "video.mp4", "status": "completed"}},
+                [item_url, second_item_url],
+                {
+                    item_url: {"filename": "video.mp4", "status": "completed"},
+                    second_item_url: {
+                        "filename": "video.mp4",
+                        "status": "completed",
+                    },
+                },
             )
             result = self._run_main(
                 directory,
@@ -131,8 +138,8 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             result["log_failed_urls"].assert_not_called()
             result["live_manager"].add_download_progress.assert_called_once_with(
                 description="Test album",
-                num_tasks=1,
-                completed_filenames=["video.mp4"],
+                num_tasks=2,
+                completed_filenames=["video.mp4", "video.mp4"],
                 completed_size_bytes=len(b"encoded"),
             )
             result["live_manager"].add_task.assert_not_called()
