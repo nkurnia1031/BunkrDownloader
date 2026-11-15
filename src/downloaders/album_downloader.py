@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING
 from src.config import MAX_RETRIES, MAX_WORKERS
 from src.crawlers.crawler_utils import get_download_info
 from src.enums import FailedReason, SkippedReason
-from src.managers.state_manager import save_album_state
+from src.managers.state_manager import (
+    find_existing_album_downloads,
+    save_album_state,
+)
 from src.misc.file_utils import (
     find_existing_download_path,
     reserve_unique_filename,
@@ -70,11 +73,6 @@ class AlbumDownloader:
     ) -> None:
         """Handle the download of an individual item in the album."""
         async with semaphore:
-            # Fast path: previously downloaded and still on disk -- skip the item page
-            # and signing API.
-            if await self._skip_cached_item(item_page, current_task):
-                return
-
             await self._pace_worker_start()
 
             # Cached file is missing or stale -- fall through and process normally.
@@ -120,10 +118,34 @@ class AlbumDownloader:
 
         """
         num_tasks = len(self.album_info.item_pages)
+        existing_items = find_existing_album_downloads(
+            self.session_info.download_path,
+            self.album_info.item_pages,
+            self.download_state.cached_items,
+        )
+        completed_count = sum(
+            item_page in existing_items
+            for item_page in self.album_info.item_pages
+        )
         self.live_manager.add_overall_task(
             description=self.album_info.album_id,
             num_tasks=num_tasks,
+            completed=completed_count,
         )
+
+        for item_page in self.album_info.item_pages:
+            filename = existing_items.get(item_page)
+            if filename is None:
+                continue
+
+            self.live_manager.update_log(
+                event="Skipped download",
+                details=(
+                    f"{filename} has already been downloaded "
+                    "(found during the initial scan)."
+                ),
+            )
+            self.live_manager.update_summary(SkippedReason.ALREADY_DOWNLOADED)
 
         # Create tasks for downloading each item in the album
         self.runtime.loop = asyncio.get_running_loop()
@@ -137,6 +159,7 @@ class AlbumDownloader:
                 max_retries,
             )
             for current_task, item_page in enumerate(self.album_info.item_pages)
+            if item_page not in existing_items
         ]
         await asyncio.gather(*tasks)
 
@@ -152,30 +175,6 @@ class AlbumDownloader:
         return bool(still_failed) or self.download_state.unresolved_failures > 0
 
     # Private methods
-    async def _skip_cached_item(self, item_page: str, current_task: int) -> bool:
-        """Skip an item if its cached download is still present on disk."""
-        cached = self.download_state.cached_items.get(item_page)
-        if not cached or cached.get("status") != "completed":
-            return False
-
-        filename = cached.get("filename", "")
-        expected_path = (
-            Path(self.session_info.download_path) / truncate_filename(filename)
-        )
-        if find_existing_download_path(expected_path) is None:
-            return False
-
-        task = self.live_manager.add_task(current_task=current_task)
-        self.live_manager.update_log(
-            event="Skipped download",
-            details=(
-                f"{filename} has already been downloaded (cached from a previous run)."
-            ),
-        )
-        self.live_manager.update_task(task, completed=100, visible=False)
-        self.live_manager.update_summary(SkippedReason.ALREADY_DOWNLOADED)
-        return True
-
     async def _resolve_item_download(self, item_page: str) -> ItemInfo:
         """Resolve the download URL, filename and date for an item page."""
         item_soup = await self._fetch_page_with_retries(item_page)

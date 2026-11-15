@@ -61,9 +61,19 @@ class LiveManager:
             details="The script has started execution.",
         )
 
-    def add_overall_task(self, description: str, num_tasks: int) -> None:
-        """Call ProgressManager to add an overall task."""
-        self.progress_manager.add_overall_task(description, num_tasks)
+    def add_overall_task(
+        self,
+        description: str,
+        num_tasks: int,
+        *,
+        completed: int = 0,
+    ) -> None:
+        """Call ProgressManager to add overall progress, including completed files."""
+        self.progress_manager.add_overall_task(
+            description,
+            num_tasks,
+            completed=completed,
+        )
 
     def add_task(self, current_task: int = 0, total: int = 100) -> None:
         """Call ProgressManager to add an individual task."""

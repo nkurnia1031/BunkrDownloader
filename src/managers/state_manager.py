@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.config import STATE_FILE
+from src.misc.file_utils import find_existing_download_path, truncate_filename
 
 
 def _state_path(download_path: str) -> Path:
@@ -59,6 +60,26 @@ def load_album_state(download_path: str) -> dict | None:
 
     data["item_dates"] = item_dates
     return data
+
+
+def find_existing_album_downloads(
+    download_path: str,
+    item_pages: list[str],
+    cached_items: dict[str, dict],
+) -> dict[str, str]:
+    """Map cached album items to files that are already complete on disk."""
+    existing_items = {}
+    for item_page in item_pages:
+        cached = cached_items.get(item_page)
+        filename = cached.get("filename") if cached else None
+        if not filename:
+            continue
+
+        expected_path = Path(download_path) / truncate_filename(filename)
+        if find_existing_download_path(expected_path) is not None:
+            existing_items[item_page] = filename
+
+    return existing_items
 
 
 def save_album_state(

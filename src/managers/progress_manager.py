@@ -33,7 +33,7 @@ class ProgressManager:
         """Initialize a progress tracking system for a specific task."""
         # Grouping progress-related configurations into a single object
         self.config = ProgressConfig(task_name, item_description)
-        self.overall_progress = self._create_progress_bar()
+        self.overall_progress = self._create_progress_bar(show_count=True)
         self.task_progress = self._create_progress_bar(show_time=True)
         self.state = ProgressState()
 
@@ -41,17 +41,30 @@ class ProgressManager:
         """Return the width of the panel."""
         return self.config.panel_width
 
-    def add_overall_task(self, description: str, num_tasks: int) -> None:
-        """Add an overall progress task with a given description and total tasks."""
+    def add_overall_task(
+        self,
+        description: str,
+        num_tasks: int,
+        *,
+        completed: int = 0,
+    ) -> None:
+        """Add an overall task with its total and any files already completed."""
+        if not 0 <= completed <= num_tasks:
+            error_message = "Completed tasks must be between zero and the total."
+            raise ValueError(error_message)
+
         with self.state.lock:
             self.state.num_tasks = num_tasks
+            self.state.initial_completed_tasks = completed
             self.state.current_album_tasks = {}
             overall_description = self._adjust_description(description)
-            self.state.current_overall_task_id = self.overall_progress.add_task(
+            overall_task_id = self.overall_progress.add_task(
                 f"[{self.config.color}]{overall_description}",
                 total=num_tasks,
-                completed=0,
+                completed=completed,
             )
+            self.state.current_overall_task_id = overall_task_id
+            self._buffer_finished_overall_task(overall_task_id)
 
     def add_task(self, current_task: int = 0, total: int = 100) -> int:
         """Add an individual task to the task progress bar."""
@@ -136,21 +149,23 @@ class ProgressManager:
             fraction = max(0.0, min(individual_task.completed / task_total, 0.99))
             self.state.current_album_tasks[task_id] = fraction
 
-        overall_completed = sum(self.state.current_album_tasks.values())
+        overall_completed = self.state.initial_completed_tasks + sum(
+            self.state.current_album_tasks.values(),
+        )
         self.overall_progress.update(overall_task_id, completed=overall_completed)
-        current_overall_task = self._get_overall_task(overall_task_id)
+        self._buffer_finished_overall_task(overall_task_id)
 
-        # Queue completed overall tasks for cleanup exactly once, no matter how
-        # many further updates arrive for an already-finished overall task.
+    def _buffer_finished_overall_task(self, task_id: TaskID) -> None:
+        """Queue a finished overall task once and remove the oldest buffered task."""
+        task = self._get_overall_task(task_id)
         if (
-            current_overall_task is not None
-            and current_overall_task.finished
-            and overall_task_id not in self.state.buffered_overall_task_ids
+            task is not None
+            and task.finished
+            and task_id not in self.state.buffered_overall_task_ids
         ):
-            self.state.buffered_overall_task_ids.add(overall_task_id)
-            self.config.overall_buffer.append(current_overall_task)
+            self.state.buffered_overall_task_ids.add(task_id)
+            self.config.overall_buffer.append(task)
 
-        # Cleanup completed overall tasks
         self._cleanup_completed_overall_tasks()
 
     def _get_overall_task(self, task_id: TaskID):  # noqa: ANN202
@@ -189,14 +204,17 @@ class ProgressManager:
         columns: list[Column] | None = None,
         *,
         show_time: bool = False,
+        show_count: bool = False,
     ) -> Progress:
         """Create and returns a progress bar for tracking download progress."""
         if columns is None:
-            columns = [
-                SpinnerColumn(),
-                BarColumn(),
+            columns = [SpinnerColumn(), BarColumn()]
+            if show_count:
+                columns.append(TextColumn("{task.completed:.0f}/{task.total:.0f}"))
+
+            columns.append(
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            ]
+            )
 
         if show_time:
             columns += [PROGRESS_COLUMNS_SEPARATOR, TimeRemainingColumn()]

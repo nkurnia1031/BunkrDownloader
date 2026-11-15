@@ -129,6 +129,12 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             result["detect_range_support"].assert_not_called()
             result["download_file"].assert_not_called()
             result["log_failed_urls"].assert_not_called()
+            result["live_manager"].add_overall_task.assert_called_once_with(
+                description=album_id,
+                num_tasks=1,
+                completed=1,
+            )
+            result["live_manager"].add_task.assert_not_called()
             result["live_manager"].update_summary.assert_called_once()
 
     def test_uncached_recoded_file_is_persisted_as_complete(self) -> None:

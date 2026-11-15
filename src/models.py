@@ -156,6 +156,7 @@ class ProgressState:
     """Store shared task-tracking state and synchronization primitives."""
 
     num_tasks: int = 0
+    initial_completed_tasks: int = 0
 
     # Explicit reference to the overall task currently being tracked, set by
     # add_overall_task(). This replaces guessing "the current task" from list
