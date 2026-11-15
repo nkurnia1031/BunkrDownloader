@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import time
+from collections.abc import Iterable
 from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,7 @@ from rich.live import Live
 from rich.text import Text
 
 from src.config import REFRESH_PER_SECOND
-from src.enums import TASK_REASON_MAPPING, TaskResult
+from src.enums import SkippedReason, TASK_REASON_MAPPING, TaskResult
 from src.version import get_version_string
 
 from .log_manager import LoggerTable
@@ -61,19 +62,28 @@ class LiveManager:
             details="The script has started execution.",
         )
 
-    def add_overall_task(
+    def add_album_progress(
         self,
         description: str,
         num_tasks: int,
-        *,
-        completed: int = 0,
+        completed_filenames: Iterable[str] = (),
     ) -> None:
-        """Call ProgressManager to add overall progress, including completed files."""
+        """Create album progress and report files found complete during the scan."""
+        filenames = tuple(completed_filenames)
         self.progress_manager.add_overall_task(
             description,
             num_tasks,
-            completed=completed,
+            completed=len(filenames),
         )
+        for filename in filenames:
+            self.update_log(
+                event="Skipped download",
+                details=(
+                    f"{filename} has already been downloaded "
+                    "(found during the initial scan)."
+                ),
+            )
+            self.update_summary(SkippedReason.ALREADY_DOWNLOADED)
 
     def add_task(self, current_task: int = 0, total: int = 100) -> None:
         """Call ProgressManager to add an individual task."""

@@ -129,13 +129,13 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             result["detect_range_support"].assert_not_called()
             result["download_file"].assert_not_called()
             result["log_failed_urls"].assert_not_called()
-            result["live_manager"].add_overall_task.assert_called_once_with(
+            result["live_manager"].add_album_progress.assert_called_once_with(
                 description=album_id,
                 num_tasks=1,
-                completed=1,
+                completed_filenames=["video.mp4"],
             )
             result["live_manager"].add_task.assert_not_called()
-            result["live_manager"].update_summary.assert_called_once()
+            result["live_manager"].update_summary.assert_not_called()
 
     def test_uncached_recoded_file_is_persisted_as_complete(self) -> None:
         """A recoded file found after resolution is skipped and saved as complete."""

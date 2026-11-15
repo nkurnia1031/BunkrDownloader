@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from src.config import MAX_RETRIES, MAX_WORKERS
 from src.crawlers.crawler_utils import get_download_info
-from src.enums import FailedReason, SkippedReason
+from src.enums import FailedReason
 from src.managers.state_manager import (
     find_existing_album_downloads,
     save_album_state,
@@ -123,29 +123,11 @@ class AlbumDownloader:
             self.album_info.item_pages,
             self.download_state.cached_items,
         )
-        completed_count = sum(
-            item_page in existing_items
-            for item_page in self.album_info.item_pages
-        )
-        self.live_manager.add_overall_task(
+        self.live_manager.add_album_progress(
             description=self.album_info.album_id,
             num_tasks=num_tasks,
-            completed=completed_count,
+            completed_filenames=list(existing_items.values()),
         )
-
-        for item_page in self.album_info.item_pages:
-            filename = existing_items.get(item_page)
-            if filename is None:
-                continue
-
-            self.live_manager.update_log(
-                event="Skipped download",
-                details=(
-                    f"{filename} has already been downloaded "
-                    "(found during the initial scan)."
-                ),
-            )
-            self.live_manager.update_summary(SkippedReason.ALREADY_DOWNLOADED)
 
         # Create tasks for downloading each item in the album
         self.runtime.loop = asyncio.get_running_loop()
