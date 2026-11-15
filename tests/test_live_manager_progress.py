@@ -7,6 +7,7 @@ from unittest.mock import Mock, call
 
 from src.enums import SkippedReason
 from src.managers.live_manager import LiveManager
+from src.models import CompletedDownloadSummary
 
 
 class LiveManagerProgressTests(unittest.TestCase):
@@ -29,8 +30,10 @@ class LiveManagerProgressTests(unittest.TestCase):
         manager.add_download_progress(
             description="album",
             num_tasks=3,
-            completed_filenames=["one.mp4", "two.mp4"],
-            completed_size_bytes=20,
+            completed_downloads=CompletedDownloadSummary(
+                filenames=("one.mp4", "two.mp4"),
+                size_bytes=20,
+            ),
         )
 
         progress_manager.add_overall_task.assert_called_once_with(

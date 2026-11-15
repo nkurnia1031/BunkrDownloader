@@ -26,6 +26,7 @@ from src.misc.file_utils import (
 from src.misc.general_utils import fetch_page
 from src.models import (
     AlbumInfo,
+    CompletedDownloadSummary,
     DownloadInfo,
     DownloadRuntime,
     DownloadState,
@@ -149,8 +150,10 @@ class AlbumDownloader:
         self.live_manager.add_download_progress(
             description=self.album_info.album_name or self.album_info.album_id,
             num_tasks=num_tasks,
-            completed_filenames=list(existing_items.values()),
-            completed_size_bytes=completed_size_bytes,
+            completed_downloads=CompletedDownloadSummary(
+                filenames=tuple(existing_items.values()),
+                size_bytes=completed_size_bytes,
+            ),
         )
 
         # Create tasks for downloading each item in the album

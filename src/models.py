@@ -152,6 +152,13 @@ class DownloadState:
     unresolved_failures: int = 0
     cached_items: dict[str, dict] = field(default_factory=dict)
 
+@dataclass(frozen=True, slots=True)
+class CompletedDownloadSummary:
+    """Summarize files already complete when album progress is initialized."""
+
+    filenames: tuple[str, ...] = ()
+    size_bytes: int = 0
+
 @dataclass(slots=True)
 class TaskTransferState:
     """Track byte totals and recent throughput for one progress task."""

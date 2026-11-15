@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime
 import time
-from collections.abc import Iterable
 from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
@@ -20,7 +19,7 @@ from rich.text import Text
 
 from src.config import REFRESH_PER_SECOND
 from src.enums import SkippedReason, TASK_REASON_MAPPING, TaskResult
-from src.models import TransferProgress
+from src.models import CompletedDownloadSummary, TransferProgress
 from src.version import get_version_string
 
 from .log_manager import LoggerTable
@@ -67,16 +66,15 @@ class LiveManager:
         self,
         description: str,
         num_tasks: int,
-        completed_filenames: Iterable[str] = (),
-        completed_size_bytes: int = 0,
+        completed_downloads: CompletedDownloadSummary = CompletedDownloadSummary(),
     ) -> None:
         """Create progress and report files found complete during the scan."""
-        filenames = tuple(completed_filenames)
+        filenames = completed_downloads.filenames
         self.progress_manager.add_overall_task(
             description,
             num_tasks,
             completed=len(filenames),
-            completed_size_bytes=completed_size_bytes,
+            completed_size_bytes=completed_downloads.size_bytes,
         )
         for filename in filenames:
             self.update_log(

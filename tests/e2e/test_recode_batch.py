@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 
 import main
 from src.managers.state_manager import load_album_state, save_album_state
+from src.models import CompletedDownloadSummary
 
 
 class RecodeBatchEndToEndTests(unittest.TestCase):
@@ -139,8 +140,10 @@ class RecodeBatchEndToEndTests(unittest.TestCase):
             result["live_manager"].add_download_progress.assert_called_once_with(
                 description="Test album",
                 num_tasks=2,
-                completed_filenames=["video.mp4", "video.mp4"],
-                completed_size_bytes=len(b"encoded"),
+                completed_downloads=CompletedDownloadSummary(
+                    filenames=("video.mp4", "video.mp4"),
+                    size_bytes=len(b"encoded"),
+                ),
             )
             result["live_manager"].add_task.assert_not_called()
             result["live_manager"].update_summary.assert_not_called()
