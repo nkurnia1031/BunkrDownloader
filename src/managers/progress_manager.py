@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import shutil
 import time
-from collections import deque
 
 from rich import filesize
 from rich.markup import escape
@@ -25,7 +24,12 @@ from rich.table import Column, Table
 from rich.text import Text
 
 from src.config import PROGRESS_MANAGER_COLORS
-from src.models import ProgressConfig, ProgressState, TransferProgress
+from src.models import (
+    ProgressConfig,
+    ProgressState,
+    TaskTransferState,
+    TransferProgress,
+)
 
 
 class _KnownTimeRemainingColumn(TimeRemainingColumn):
@@ -115,10 +119,7 @@ class ProgressManager:
             )
             self.state.current_album_tasks[task_id] = 0.0
             self.state.task_prefixes[task_id] = task_prefix
-            self.state.task_downloaded_bytes[task_id] = 0
-            self.state.task_transfer_speeds[task_id] = 0.0
-            self.state.task_network_bytes[task_id] = 0
-            self.state.task_transfer_samples[task_id] = deque()
+            self.state.task_transfers[task_id] = TaskTransferState()
             return task_id
 
     def update_task_description(self, task_id: int, description: str) -> None:
@@ -152,7 +153,9 @@ class ProgressManager:
                 )
 
             if not visible:
-                self.state.task_transfer_speeds[task_id] = 0.0
+                transfer_state = self.state.task_transfers.get(task_id)
+                if transfer_state is not None:
+                    transfer_state.speed_bytes_per_second = 0.0
 
             self.task_progress.update(
                 task_id,
@@ -161,7 +164,7 @@ class ProgressManager:
                 visible=visible,
                 transfer=self._task_transfer_text(task_id),
                 speed=self._format_speed(
-                    self.state.task_transfer_speeds.get(task_id, 0.0),
+                    self._task_speed(task_id),
                 ),
             )
             self._update_overall_task(task_id)
@@ -216,7 +219,9 @@ class ProgressManager:
         if individual_task.finished and task_id not in self.state.completed_task_ids:
             self.state.completed_task_ids.add(task_id)
             self.state.current_album_tasks[task_id] = 1.0
-            self.state.task_transfer_speeds[task_id] = 0.0
+            transfer_state = self.state.task_transfers.get(task_id)
+            if transfer_state is not None:
+                transfer_state.speed_bytes_per_second = 0.0
             self.task_progress.update(
                 task_id,
                 visible=False,
@@ -242,7 +247,7 @@ class ProgressManager:
             transfer=self._overall_transfer_text(),
             speed=self._format_speed(
                 sum(
-                    self.state.task_transfer_speeds.get(current_task_id, 0.0)
+                    self._task_speed(current_task_id)
                     for current_task_id in self.state.current_album_tasks
                 ),
             ),
@@ -292,51 +297,67 @@ class ProgressManager:
         transferred_bytes: int | None,
     ) -> None:
         """Update one file's byte totals and its rolling transfer speed."""
+        transfer_state = self.state.task_transfers.setdefault(
+            task_id,
+            TaskTransferState(),
+        )
         if total_bytes is not None and total_bytes >= 0:
-            self.state.task_total_bytes[task_id] = total_bytes
+            transfer_state.total_bytes = total_bytes
         if downloaded_bytes is not None:
-            self.state.task_downloaded_bytes[task_id] = max(0, downloaded_bytes)
+            transfer_state.downloaded_bytes = max(0, downloaded_bytes)
 
         if transferred_bytes is None:
             return
 
         now = time.monotonic()
-        network_bytes = self.state.task_network_bytes.get(task_id, 0)
-        network_bytes += max(0, transferred_bytes)
-        self.state.task_network_bytes[task_id] = network_bytes
-        samples = self.state.task_transfer_samples.setdefault(task_id, deque())
-        samples.append((now, network_bytes))
+        transfer_state.network_bytes += max(0, transferred_bytes)
+        transfer_state.samples.append((now, transfer_state.network_bytes))
         cutoff = now - 1.5
-        while len(samples) > 1 and samples[1][0] < cutoff:
-            samples.popleft()
+        while (
+            len(transfer_state.samples) > 1
+            and transfer_state.samples[1][0] < cutoff
+        ):
+            transfer_state.samples.popleft()
 
         speed = 0.0
-        if len(samples) > 1:
-            elapsed = samples[-1][0] - samples[0][0]
+        if len(transfer_state.samples) > 1:
+            elapsed = transfer_state.samples[-1][0] - transfer_state.samples[0][0]
             if elapsed > 0:
-                speed = max(0, samples[-1][1] - samples[0][1]) / elapsed
-        self.state.task_transfer_speeds[task_id] = speed
+                speed = max(
+                    0,
+                    transfer_state.samples[-1][1] - transfer_state.samples[0][1],
+                ) / elapsed
+        transfer_state.speed_bytes_per_second = speed
 
     def _task_transfer_text(self, task_id: int) -> str:
         """Format the current file's downloaded and total bytes."""
-        downloaded = self.state.task_downloaded_bytes.get(task_id, 0)
-        total = self.state.task_total_bytes.get(task_id)
+        transfer_state = self.state.task_transfers.get(task_id)
+        downloaded = transfer_state.downloaded_bytes if transfer_state else 0
+        total = transfer_state.total_bytes if transfer_state else None
         return self._format_transfer(downloaded, total)
+
+    def _task_speed(self, task_id: int) -> float:
+        """Return the latest transfer speed for one file task."""
+        transfer_state = self.state.task_transfers.get(task_id)
+        return transfer_state.speed_bytes_per_second if transfer_state else 0.0
 
     def _overall_transfer_text(self) -> str:
         """Format album bytes and mark a growing total as a lower bound."""
         current_tasks = self.state.current_album_tasks
         downloaded = self.state.initial_completed_size_bytes + sum(
-            self.state.task_downloaded_bytes.get(task_id, 0)
+            self.state.task_transfers[task_id].downloaded_bytes
             for task_id in current_tasks
+            if task_id in self.state.task_transfers
         )
         total = self.state.initial_completed_size_bytes + sum(
-            self.state.task_total_bytes.get(task_id, 0)
+            self.state.task_transfers[task_id].total_bytes or 0
             for task_id in current_tasks
+            if task_id in self.state.task_transfers
         )
         known_sizes = self.state.initial_completed_tasks + sum(
-            task_id in self.state.task_total_bytes
+            self.state.task_transfers[task_id].total_bytes is not None
             for task_id in current_tasks
+            if task_id in self.state.task_transfers
         )
 
         if not known_sizes:

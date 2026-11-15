@@ -152,6 +152,16 @@ class DownloadState:
     unresolved_failures: int = 0
     cached_items: dict[str, dict] = field(default_factory=dict)
 
+@dataclass(slots=True)
+class TaskTransferState:
+    """Track byte totals and recent throughput for one progress task."""
+
+    downloaded_bytes: int = 0
+    total_bytes: int | None = None
+    network_bytes: int = 0
+    samples: deque[tuple[float, int]] = field(default_factory=deque)
+    speed_bytes_per_second: float = 0.0
+
 @dataclass
 class ProgressState:
     """Store shared task-tracking state and synchronization primitives."""
@@ -171,13 +181,7 @@ class ProgressState:
     completed_task_ids: set[int] = field(default_factory=set)
     current_album_tasks: dict[int, float] = field(default_factory=dict)
     task_prefixes: dict[int, str] = field(default_factory=dict)
-    task_downloaded_bytes: dict[int, int] = field(default_factory=dict)
-    task_total_bytes: dict[int, int] = field(default_factory=dict)
-    task_network_bytes: dict[int, int] = field(default_factory=dict)
-    task_transfer_samples: dict[int, deque[tuple[float, int]]] = field(
-        default_factory=dict,
-    )
-    task_transfer_speeds: dict[int, float] = field(default_factory=dict)
+    task_transfers: dict[int, TaskTransferState] = field(default_factory=dict)
 
     # Synchronize access to shared progress state across concurrent download threads.
     lock: Lock = field(default_factory=Lock)
